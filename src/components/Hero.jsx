@@ -25,16 +25,14 @@ export default function Hero({
       </div>
 
       {/* Contenido */}
-      <div className="relative z-10 max-w-7xl mx-auto px-6 lg:px-8 py-32 flex flex-col lg:flex-row items-center">
+      <div className="relative z-10 max-w-7xl mx-auto px-6 lg:px-8 py-20 md:py-28 lg:py-32 flex flex-col lg:flex-row items-center">
         {/* Texto */}
         <div className="lg:w-1/2 text-center lg:text-left">
-          {/* <h4 className="uppercase tracking-wide text-white font-semibold mb-2">
-            Gardening & Landscaping Services
-          </h4> */}
+   
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight">
             Fomentando el reciclaje <br />  y la conciencia ambiental<br /> en Río Gallegos 
           </h1>
-          <p className="mt-6 text-lg text-green-100 max-w-lg">
+          <p className="mt-6 text-lg text-white max-w-lg">
             EcoRG es tu plataforma para encontrar puntos verdes, seguir el calendario de recolección y reportar problemas ambientales
           </p>
           <div className="mt-8">

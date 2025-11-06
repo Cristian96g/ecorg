@@ -7,7 +7,7 @@
  /* background-color:#2d3d33; */
 }
 @layer base {
-             /* section { @apply py-8; }      evita py-[30px] en @apply, usa tokens (p. ej. py-8) */
+             section { @apply py-8; }      
   h1 { @apply text-4xl font-bold; }
   h2 { @apply  mx-auto font-semibold tracking-tight  }
   .titlesecond{ @apply text-4xl font-bold text-[#3c6724]}

@@ -124,7 +124,7 @@ export default function Map() {
         </aside>
 
         {/* Mapa */}
-        <section className="md:col-span-8">
+        <section className="md:col-span-8 !py-0">
           <div className="relative rounded-2xl overflow-hidden border border-gray-100 shadow-sm bg-white">
             {/* Contenedor absoluto para que los overlays queden arriba */}
             <div className="relative h-[70vh] min-h-[520px]">

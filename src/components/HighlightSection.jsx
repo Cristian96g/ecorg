@@ -3,8 +3,8 @@ import recoleccion from "../assets/recoleccion.jpg";
 
 function HighlightSection() {
   return (
-    <section className=" md:py-12 lg:py-24">
-      <div className="mx-auto max-w-6xl  flex flex-col md:flex-row items-center gap-8">
+    <section className=" md:py-14 lg:py-24">
+      <div className="mx-auto flex flex-col md:flex-row items-center gap-8 pt-16 pb-8">
         {/* Texto */}
         <div className="flex-1">
           <h2 className="titlesecond">

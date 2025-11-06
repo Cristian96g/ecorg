@@ -93,7 +93,7 @@ export default function Schedule() {
         </aside>
 
         {/* Tabla */}
-        <section className="md:col-span-8">
+        <section className="md:col-span-8 !py-0">
           <div className="rounded-2xl border border-gray-100 shadow-sm bg-white overflow-hidden">
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">

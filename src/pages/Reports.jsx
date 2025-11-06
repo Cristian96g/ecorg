@@ -1,54 +1,7 @@
-// import { useState } from 'react';
-
-// export default function Reports() {
-//   const [items, setItems] = useState([
-//     {
-//       _id: '1',
-//       title: 'Basural en Av. San Martín',
-//       description: 'Acumulación de bolsas y plásticos en la esquina.',
-//       upvotes: 3
-//     },
-//     {
-//       _id: '2',
-//       title: 'Contenedor roto en Barrio Belgrano',
-//       description: 'El contenedor de reciclaje de vidrio está dañado.',
-//       upvotes: 7
-//     }
-//   ]);
-
-//   function vote(id) {
-//     setItems(items.map(r => r._id === id ? { ...r, upvotes: r.upvotes + 1 } : r));
-//   }
-
-//   return (
-//     <div className="mx-auto max-w-6xl px-6 md:px-8 py-8 grid gap-8 md:grid-cols-2">
-//       <div>
-//        <div className="text-start mb-8">
-//         <h1 className="titlesecond">Reportes comunitarios</h1>
-//         <p className="text-lg text-gray-600">Estos son reportes de minibasurales</p>
-//       </div>
-//         <ul className="mt-4 space-y-3">
-//           {items.map(r => (
-//             <li key={r._id} className="p-4 bg-[#f5f8f5] border-gray-200 rounded-lg shadow-sm">
-//               <div className="font-semibold">{r.title}</div>
-//               <p className="text-sm text-gray-700 mb-2">{r.description}</p>
-//               <button 
-//                 onClick={() => vote(r._id)} 
-//                 className="text-sm rounded-md border px-3 py-1">
-//                 +1 ({r.upvotes})
-//               </button>
-//             </li>
-//           ))}
-//         </ul>
-//       </div>
-//     </div>
-//   );
-// }
-
-
-import { useMemo, useState } from "react";
-import { reportsMock } from "../constants/reportsMock";
+import { useEffect, useMemo, useState } from "react";
 import { FiSearch, FiPlus, FiMapPin, FiEye } from "react-icons/fi";
+import { ReportsAPI, getToken } from "../api/api"; 
+import { toast } from "react-toastify";
 
 const ESTADOS = [
   { value: "", label: "Todos" },
@@ -66,32 +19,80 @@ const SEVERIDADES = [
 
 const WEEKDAYS = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
 const fmtFecha = (iso) => {
+  if (!iso) return "-";
   const d = new Date(iso);
   return `${WEEKDAYS[d.getDay()]} ${d.toLocaleDateString()} ${d.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})}`;
 };
 
 export default function Reports() {
+  // datos
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  // filtros
   const [q, setQ] = useState("");
   const [barrio, setBarrio] = useState("");
-  const [estado, setEstado] = useState("");
+  const [estado, setEstado] = useState("");     // operativo: abierto/en_progreso/resuelto
   const [severidad, setSeveridad] = useState("");
+
+  // panel crear
   const [openForm, setOpenForm] = useState(false);
 
-  const barrios = useMemo(() => {
-    const set = new Set(reportsMock.map(r => r.barrio));
-    return ["", ...Array.from(set).sort()];
+  // cargar SOLO aprobados para vista pública
+  useEffect(() => {
+    (async () => {
+      try {
+        setLoading(true);
+        const data = await ReportsAPI.list({ status: "approved" });
+        setItems((data?.items ?? data) || []);
+      } catch (e) {
+        console.error(e);
+        setError("No se pudieron cargar los reportes.");
+        toast.error("No se pudieron cargar los reportes."); // 👈 toast error carga
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, []);
 
+  // barrios dinámicos
+  const barrios = useMemo(() => {
+    const set = new Set(items.map(r => r.barrio).filter(Boolean));
+    return ["", ...Array.from(set).sort()];
+  }, [items]);
+
+  // filtros en memoria
   const rows = useMemo(() => {
-    return reportsMock.filter(r => {
+    return items.filter(r => {
       const okBarrio = !barrio || r.barrio === barrio;
-      const okEstado = !estado || r.estado === estado;
+      const okEstado = !estado || r.estado === estado;       // estado operativo
       const okSev    = !severidad || r.severidad === severidad;
-      const text = `${r.id} ${r.titulo} ${r.direccion} ${r.barrio}`.toLowerCase();
+      const text = `${r.code || r._id} ${r.titulo || r.title} ${r.direccion} ${r.barrio}`.toLowerCase();
       const okQ = !q || text.includes(q.toLowerCase());
       return okBarrio && okEstado && okSev && okQ;
     });
-  }, [q, barrio, estado, severidad]);
+  }, [items, q, barrio, estado, severidad]);
+
+  // click en "Nuevo reporte": siempre visible, pero chequea login
+  function handleNewReportClick() {
+    const token = getToken();
+    if (!token) {
+       toast.error("Necesitás iniciar sesión para crear un reporte.");// 👈 rojo
+      // redirigimos luego de un pequeño delay
+       setTimeout(() => {
+        const next = encodeURIComponent("/reportes");
+        window.location.href = `/login?next=${next}`;
+      }, 1800);
+      return;
+    }
+    setOpenForm(true);
+  }
+
+  // cuando se crea, lo inyectamos al principio
+  function handleCreated(newDoc) {
+    setItems(cur => [newDoc, ...cur]);
+  }
 
   return (
     <div className="mx-auto max-w-7xl px-6 md:px-8 py-10">
@@ -99,10 +100,9 @@ export default function Reports() {
       <header className="mb-6 flex items-center justify-between gap-3">
         <div>
           <h1 className="text-3xl md:text-4xl font-semibold text-[#2d3d33]">Reportes de Mini Basurales</h1>
-          <p className="text-gray-500 mt-2">Informes de la comunidad y estado de resolución.</p>
         </div>
         <button
-          onClick={() => setOpenForm(true)}
+          onClick={handleNewReportClick}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-xl shadow-md bg-[#0f8237] text-white hover:bg-[#0d6f2f] transition"
         >
           <FiPlus className="w-5 h-5" />
@@ -154,7 +154,7 @@ export default function Reports() {
         </aside>
 
         {/* Tabla */}
-        <section className="md:col-span-8">
+        <section className="md:col-span-8 !py-0">
           <div className="rounded-2xl border border-gray-100 shadow-sm bg-white overflow-hidden">
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
@@ -170,25 +170,32 @@ export default function Reports() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {rows.map((r) => (
-                    <tr key={r.id} className="hover:bg-gray-50/60">
-                      <Td className="font-medium text-[#2d3d33]">{r.id}</Td>
-                      <Td>{r.barrio}</Td>
-                      <Td className="text-gray-600">{r.direccion}</Td>
+                  {loading && (
+                    <tr>
+                      <Td colSpan={7} className="text-center py-10 text-gray-500">Cargando…</Td>
+                    </tr>
+                  )}
+
+                  {!loading && rows.map((r) => (
+                    <tr key={r._id} className="hover:bg-gray-50/60">
+                      <Td className="font-medium text-[#2d3d33]">{r.code || r._id?.slice(-6)}</Td>
+                      <Td>{r.barrio || "-"}</Td>
+                      <Td className="text-gray-600">{r.direccion || "-"}</Td>
                       <Td><SeverityPill level={r.severidad} /></Td>
                       <Td><StatusBadge state={r.estado} /></Td>
-                      <Td className="text-gray-600">{fmtFecha(r.fecha)}</Td>
+                      <Td className="text-gray-600">{fmtFecha(r.createdAt)}</Td>
                       <Td>
                         <div className="flex items-center gap-2">
                           <button
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-gray-200 hover:bg-gray-50"
-                            onClick={() => alert(`Ver ${r.id} en el mapa`)}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-50"
+                            disabled={!r?.location?.coordinates?.length}
+                             onClick={() => toast.info(`Abrir mapa de ${r.code || r._id?.slice(-6)}`)}
                           >
                             <FiMapPin className="w-4 h-4" /> Mapa
                           </button>
                           <button
                             className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-gray-200 hover:bg-gray-50"
-                            onClick={() => alert(`Detalle ${r.id}`)}
+                            onClick={() => toast.info(`Ver detalle de ${r.code || r._id?.slice(-6)}`)}
                           >
                             <FiEye className="w-4 h-4" /> Ver
                           </button>
@@ -196,10 +203,11 @@ export default function Reports() {
                       </Td>
                     </tr>
                   ))}
-                  {rows.length === 0 && (
+
+                  {!loading && rows.length === 0 && (
                     <tr>
                       <Td colSpan={7} className="text-center py-10 text-gray-500">
-                        No hay reportes con los filtros actuales.
+                        {error || "No hay reportes con los filtros actuales."}
                       </Td>
                     </tr>
                   )}
@@ -210,9 +218,12 @@ export default function Reports() {
         </section>
       </div>
 
-      {/* Panel lateral: formulario nuevo reporte */}
+      {/* Panel lateral: formulario nuevo reporte (solo se abre si hay login) */}
       {openForm && (
-        <SidePanel onClose={() => setOpenForm(false)} />
+        <SidePanel
+          onClose={() => setOpenForm(false)}
+          onCreated={handleCreated}
+        />
       )}
     </div>
   );
@@ -266,7 +277,44 @@ function SeverityPill({ level }) {
 }
 
 /* ---------- Panel lateral (formulario nuevo reporte) ---------- */
-function SidePanel({ onClose }) {
+function SidePanel({ onClose, onCreated }) {
+  const [form, setForm] = useState({
+    titulo: "",
+    barrio: "",
+    direccion: "",
+    severidad: "baja",
+    descripcion: "",
+    lat: "",
+    lng: "",
+  });
+  const [saving, setSaving] = useState(false);
+
+  const setField = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
+
+  async function submit() {
+    if (!form.titulo || !form.direccion) {
+      toast.warn("Completá al menos Título y Dirección."); // 👈 toast warn
+      return;
+    }
+    try {
+      setSaving(true);
+      const created = await ReportsAPI.create(form); // requiere token (verifyJWT)
+      onCreated?.(created);
+      onClose();
+      toast.success("Reporte enviado. Quedará pendiente de aprobación."); // 👈 success
+    } catch (e) {
+      if (e?.response?.status === 401) {
+        toast.error("Necesitás iniciar sesión para crear un reporte."); // 👈 rojo
+        window.location.href = "/login?next=/reportes";
+      } else {
+        toast.error("No se pudo crear el reporte."); // 👈 error genérico
+        console.error(e);
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
@@ -274,30 +322,61 @@ function SidePanel({ onClose }) {
         <h3 className="text-xl font-semibold text-[#2d3d33]">Nuevo reporte</h3>
         <p className="text-gray-500 mb-4">Describe el mini basural para que podamos resolverlo.</p>
 
-        <form className="space-y-4">
+        <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
           <Field label="Título">
-            <input className="w-full rounded-xl border border-gray-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#0f8237]/30" placeholder="Ej: Residuos en la vereda" />
+            <input
+              value={form.titulo}
+              onChange={(e) => setField("titulo", e.target.value)}
+              className="w-full rounded-xl border border-gray-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#0f8237]/30"
+              placeholder="Ej: Residuos en la vereda"
+            />
           </Field>
           <Field label="Barrio">
-            <input className="w-full rounded-xl border border-gray-200 px-3 py-2" placeholder="Ej: Centro" />
+            <input
+              value={form.barrio}
+              onChange={(e) => setField("barrio", e.target.value)}
+              className="w-full rounded-xl border border-gray-200 px-3 py-2"
+              placeholder="Ej: Centro"
+            />
           </Field>
           <Field label="Dirección">
-            <input className="w-full rounded-xl border border-gray-200 px-3 py-2" placeholder="Calle y número" />
+            <input
+              value={form.direccion}
+              onChange={(e) => setField("direccion", e.target.value)}
+              className="w-full rounded-xl border border-gray-200 px-3 py-2"
+              placeholder="Calle y número"
+            />
           </Field>
           <Field label="Severidad">
-            <select className="w-full rounded-xl border border-gray-200 px-3 py-2">
+            <select
+              value={form.severidad}
+              onChange={(e) => setField("severidad", e.target.value)}
+              className="w-full rounded-xl border border-gray-200 px-3 py-2"
+            >
               <option value="baja">Baja</option>
               <option value="media">Media</option>
               <option value="alta">Alta</option>
             </select>
           </Field>
           <Field label="Descripción">
-            <textarea rows={3} className="w-full rounded-xl border border-gray-200 px-3 py-2" placeholder="Detalles útiles…" />
+            <textarea
+              rows={3}
+              value={form.descripcion}
+              onChange={(e) => setField("descripcion", e.target.value)}
+              className="w-full rounded-xl border border-gray-200 px-3 py-2"
+              placeholder="Detalles útiles…"
+            />
           </Field>
-          {/* Aquí podrías integrar subida de fotos y geolocalización */}
+
+          {/* Si más adelante integrás autocompletado, seteá lat/lng acá */}
+          {/* <input type="hidden" value={form.lat} />
+              <input type="hidden" value={form.lng} /> */}
+
           <div className="flex items-center justify-end gap-2 pt-2">
             <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border border-gray-200 hover:bg-gray-50">Cancelar</button>
-            <button type="button" onClick={() => { alert("Reporte enviado"); onClose(); }} className="px-4 py-2 rounded-xl bg-[#0f8237] text-white hover:bg-[#0d6f2f]">Enviar</button>
+            <button type="button" onClick={submit} disabled={saving} className="px-4 py-2 rounded-xl bg-[#0f8237] text-white hover:bg-[#0d6f2f]">
+              {saving ? "Enviando…" : "Enviar"}
+            </button>
           </div>
         </form>
       </div>
