@@ -16,7 +16,7 @@ function HighlightSection() {
           </p>
           <Link
             to="/calendario"
-            className="mt-5 inline-block rounded-md  px-6 py-3  font-medium buttonprimary"
+            className="mt-5 inline-block rounded-md    font-medium buttonprimary"
           >
             Ver calendario
           </Link>

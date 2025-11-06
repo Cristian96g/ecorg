@@ -103,7 +103,7 @@ export default function Reports() {
         </div>
         <button
           onClick={handleNewReportClick}
-          className="inline-flex items-center buttonprimary gap-2 px-4 py-2 rounded-xl shadow-md text-white transition"
+          className="buttonprimary"
         >
           <FiPlus className="w-5 h-5" />
           Nuevo reporte

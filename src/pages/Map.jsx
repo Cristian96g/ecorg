@@ -140,7 +140,7 @@ export default function Map() {
 
               <button
                 type="button"
-                className="absolute bottom-4 left-4 z-20 inline-flex items-center gap-2 px-4 py-2 rounded-xl shadow-md bg-[#0f8237] text-white hover:bg-[#0d6f2f] transition"
+                className="absolute bottom-4 left-4 z-20 buttonprimary"
                 onClick={() => alert("Ir a crear reporte")}
                 aria-label="Nuevo reporte"
               >

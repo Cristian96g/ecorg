@@ -38,7 +38,7 @@ export default function Hero({
           <div className="mt-8">
             <a
               href="#services"
-              className="inline-block buttonprimary  px-6 py-3 text-lg font-medium rounded-md shadow"
+              className="buttonprimary  "
             >
               Más infromación
             </a>
