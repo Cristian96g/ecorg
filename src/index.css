@@ -14,8 +14,12 @@
   .colorprimary{@apply text-[#2d3d33]}
   .colorsecondary{@apply text-[#2a372f]}
   .buttonprimary{@apply bg-[#66a939] text-white hover:bg-[#3c6724]}
+  .input-base {
+    @apply w-full rounded-xl border border-gray-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#0f8237]/30;
+  }
 }
 @layer components {
+  
     .container{
         @apply max-w-full w-[1280px] px-5 mx-auto;
     }

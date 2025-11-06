@@ -27,6 +27,7 @@ function App() {
         closeOnClick
         pauseOnHover
         theme="colored"
+       className="!py-0"
       />
     </div>
   );

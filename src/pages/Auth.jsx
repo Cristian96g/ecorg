@@ -3,6 +3,7 @@ import { useNavigate, Link, useLocation } from "react-router-dom";
 // Asegúrate de tener creado src/api/api.js con AuthAPI y setToken()
 import { AuthAPI, setToken } from "../api/api";
 import { useAuth } from "../state/auth"; 
+import logo from "../assets/logo-transparente.png";
 
 /**
  * AuthPage: Login y Registro con el estilo EcoRG
@@ -36,17 +37,15 @@ export default function AuthPage({ mode = "login" }) {
         <div className="absolute -left-52 -bottom-2 w-72 h-72 rounded-full " style={{background: BRAND.primary}}/>
         <div className="relative z-10 max-w-md">
           <div className="flex items-center gap-3">
-            <div className="h-11 w-11 rounded-2xl flex items-center justify-center" style={{background: BRAND.primary}}>
-              {/* Ícono hoja simple */}
-              <svg viewBox="0 0 24 24" className="h-6 w-6 text-white" fill="currentColor"><path d="M19 4c-7.5 1.1-12 5.6-12 12 0 2.2 1.8 4 4 4 6.4 0 10.9-4.4 12-12-.7 4.3-4.2 5.9-8 6-3.3.1-6.1 2.7-6.9 6 1.9-1.6 4.5-2.7 7.1-2.9C20.3 16.7 22 12.3 22 6c0-1.1-.9-2-2-2z"/></svg>
-            </div>
-            <h1 className="text-2xl font-semibold tracking-tight">EcoRG</h1>
+            <img src={logo} alt="" className="w-60"/>
           </div>
-          <p className="mt-6 text-gray-900 leading-relaxed">
+          <p className="mt-2 text-gray-900 leading-relaxed">
             Plataforma para reciclar, donar y coordinar voluntariados en Río Gallegos.
             Sumate a la comunidad y ayudanos a mantener la ciudad más limpia.
           </p>
+
         </div>
+      
       </aside>
 
       {/* Contenido */}
@@ -139,7 +138,7 @@ function LoginForm() {
         <input
           type="email"
           required
-          className="input"
+          className="input-base"
           placeholder="tu@correo.com"
           value={form.email}
           onChange={(e) => setForm({ ...form, email: e.target.value })}
@@ -151,7 +150,7 @@ function LoginForm() {
           <input
             type={show ? "text" : "password"}
             required
-            className="input pr-10"
+            className="input-base"
             placeholder="••••••••"
             value={form.password}
             onChange={(e) => setForm({ ...form, password: e.target.value })}
@@ -225,7 +224,7 @@ function RegisterForm({ onSwitch }) {
       <Field label="Nombre y apellido">
         <input
           required
-          className="input"
+          className="input-base"
           placeholder="María López"
           value={form.nombre}
           onChange={(e) => setForm({ ...form, nombre: e.target.value })}
@@ -236,7 +235,7 @@ function RegisterForm({ onSwitch }) {
         <input
           type="email"
           required
-          className="input"
+          className="input-base"
           placeholder="tu@correo.com"
           value={form.email}
           onChange={(e) => setForm({ ...form, email: e.target.value })}
@@ -249,7 +248,7 @@ function RegisterForm({ onSwitch }) {
             type={show ? "text" : "password"}
             required
             minLength={6}
-            className="input pr-10"
+            className="input-base"
             placeholder="Mínimo 6 caracteres"
             value={form.password}
             onChange={(e) => setForm({ ...form, password: e.target.value })}
@@ -262,7 +261,7 @@ function RegisterForm({ onSwitch }) {
 
       <Field label="Teléfono (opcional)">
         <input
-          className="input"
+          className="input-base"
           placeholder="2966 123456"
           value={form.telefono}
           onChange={(e) => setForm({ ...form, telefono: e.target.value })}
@@ -272,7 +271,7 @@ function RegisterForm({ onSwitch }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Field label="Dirección">
           <input
-            className="input"
+            className="input-base"
             placeholder="Calle 123"
             value={form.direccion}
             onChange={(e) => setForm({ ...form, direccion: e.target.value })}
@@ -280,7 +279,7 @@ function RegisterForm({ onSwitch }) {
         </Field>
         <Field label="Barrio">
           <input
-            className="input"
+            className="input-base"
             placeholder="San Benito"
             value={form.barrio}
             onChange={(e) => setForm({ ...form, barrio: e.target.value })}

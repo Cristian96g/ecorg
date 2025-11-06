@@ -103,7 +103,7 @@ export default function Reports() {
         </div>
         <button
           onClick={handleNewReportClick}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl shadow-md bg-[#0f8237] text-white hover:bg-[#0d6f2f] transition"
+          className="inline-flex items-center buttonprimary gap-2 px-4 py-2 rounded-xl shadow-md text-white transition"
         >
           <FiPlus className="w-5 h-5" />
           Nuevo reporte
@@ -367,10 +367,6 @@ function SidePanel({ onClose, onCreated }) {
               placeholder="Detalles útiles…"
             />
           </Field>
-
-          {/* Si más adelante integrás autocompletado, seteá lat/lng acá */}
-          {/* <input type="hidden" value={form.lat} />
-              <input type="hidden" value={form.lng} /> */}
 
           <div className="flex items-center justify-end gap-2 pt-2">
             <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border border-gray-200 hover:bg-gray-50">Cancelar</button>
