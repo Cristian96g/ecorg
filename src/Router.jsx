@@ -81,8 +81,8 @@ export default function AppRoutes() {
       <Routes>
         {/* públicas */}
         <Route path="/home" element={<Home />} />
-        <Route path="/" element={<Mapa />} />
-        <Route path="/calendario" element={<Calendario />} />
+        <Route path="/mapa" element={<Mapa />} />
+        <Route path="/" element={<Calendario />} />
         <Route path="/gamificacion" element={<Gamificacion />} />
         <Route path="/reportes" element={<Reportes />} />
         <Route path="/educacion" element={<Educacion />} />
