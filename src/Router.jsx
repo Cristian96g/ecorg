@@ -85,8 +85,8 @@ export default function AppRoutes() {
         <Route path="/calendario" element={<Calendario />} />
         <Route path="/gamificacion" element={<Gamificacion />} />
         <Route path="/reportes" element={<Reportes />} />
-        <Route path="/" element={<Educacion />} />
-        <Route path="/login" element={<AuthPage mode="login" />} />
+        <Route path="/educacion" element={<Educacion />} />
+        <Route path="/" element={<AuthPage mode="login" />} />
         <Route path="/registrarse" element={<AuthPage mode="register" />} />
 
         {/* protegidas */}
