@@ -83,8 +83,8 @@ export default function AppRoutes() {
         <Route path="/home" element={<Home />} />
         <Route path="/mapa" element={<Mapa />} />
         <Route path="/calendario" element={<Calendario />} />
-        <Route path="/" element={<Gamificacion />} />
-        <Route path="/reportes" element={<Reportes />} />
+        <Route path="/gamificacion" element={<Gamificacion />} />
+        <Route path="/" element={<Reportes />} />
         <Route path="/educacion" element={<Educacion />} />
         <Route path="/login" element={<AuthPage mode="login" />} />
         <Route path="/registrarse" element={<AuthPage mode="register" />} />
