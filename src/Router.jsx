@@ -80,8 +80,8 @@ export default function AppRoutes() {
     <Suspense fallback={null /* o tu spinner */}>
       <Routes>
         {/* públicas */}
-        <Route path="/" element={<Home />} />
-        <Route path="/mapa" element={<Mapa />} />
+        <Route path="/home" element={<Home />} />
+        <Route path="/" element={<Mapa />} />
         <Route path="/calendario" element={<Calendario />} />
         <Route path="/gamificacion" element={<Gamificacion />} />
         <Route path="/reportes" element={<Reportes />} />
