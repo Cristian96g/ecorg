@@ -1,274 +1,388 @@
-import { useState, useMemo } from "react";
-import { FiEdit2, FiSave, FiX, FiUpload } from "react-icons/fi";
+import { useEffect, useMemo, useState } from "react";
+import { FiEdit2, FiLoader, FiSave, FiUpload, FiUser, FiX } from "react-icons/fi";
+import { getAssetUrl, getFriendlyApiError, UsersAPI } from "../api/api";
+import SectionHero from "../components/ui/SectionHero";
+import { useAuth } from "../state/auth";
 
-// Mock inicial (reemplazá por tu fetch/auth)
-const mockUser = {
-  nombre: "Cristian Gómez",
-  email: "cristian@example.com",
-  telefono: "+54 2966 123456",
-  direccion: "Av. San Martín 123",
-  barrio: "Centro",
-  avatarUrl: "",
-  preferencias: {
-    notificaciones: true,
-    newsletter: false,
-  },
-};
+const BARRIOS = [
+  "Centro",
+  "Belgrano",
+  "San Benito",
+  "Jardín Botánico",
+  "YCF",
+  "Evita",
+];
 
-// barrios de tu ciudad (podés traerlos de tu API)
-const BARRIOS = ["Centro", "Belgrano", "San Benito", "Jardín Botánico", "YCF", "Evita"];
+function buildForm(user) {
+  return {
+    nombre: user?.nombre ?? "",
+    email: user?.email ?? "",
+    telefono: user?.telefono ?? "",
+    direccion: user?.direccion ?? "",
+    barrio: user?.barrio ?? "",
+    avatarUrl: user?.avatarUrl ?? "",
+    role: user?.role ?? "user",
+    badges: Array.isArray(user?.badges) ? user.badges : [],
+  };
+}
 
 export default function Profile() {
-  const [user, setUser] = useState(mockUser);
+  const { user, ready, login } = useAuth();
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState(user);
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState(null);
   const [avatarFile, setAvatarFile] = useState(null);
-  const avatarPreview = useMemo(
-    () => (avatarFile ? URL.createObjectURL(avatarFile) : user.avatarUrl || ""),
-    [avatarFile, user.avatarUrl]
-  );
+  const [errors, setErrors] = useState({});
+  const [feedback, setFeedback] = useState(null);
 
-  const onEdit = () => {
-    setForm(user);
-    setEditing(true);
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadProfile() {
+      if (!ready) return;
+
+      if (!user) {
+        setLoading(false);
+        setFeedback({
+          type: "error",
+          message: "No pudimos cargar tu perfil. Iniciá sesión nuevamente para continuar.",
+        });
+        return;
+      }
+
+      setLoading(true);
+      setFeedback(null);
+
+      if (!cancelled) {
+        setForm(buildForm(user));
+      }
+
+      try {
+        const me = await UsersAPI.getMe();
+        if (!cancelled) {
+          setForm(buildForm(me));
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setFeedback({
+            type: "error",
+            message: getFriendlyApiError(
+              error,
+              "No pudimos cargar tus datos en este momento."
+            ),
+          });
+          setForm(buildForm(user));
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadProfile();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, user]);
+
+  const avatarPreview = useMemo(() => {
+    if (avatarFile) return URL.createObjectURL(avatarFile);
+    return getAssetUrl(form?.avatarUrl);
+  }, [avatarFile, form]);
+
+  useEffect(() => {
+    return () => {
+      if (avatarFile) {
+        URL.revokeObjectURL(avatarPreview);
+      }
+    };
+  }, [avatarFile, avatarPreview]);
+
+  const onChange = (field, value) => {
+    setForm((current) => ({ ...current, [field]: value }));
+    setErrors((current) => ({ ...current, [field]: "" }));
+    setFeedback(null);
   };
-  const onCancel = () => {
+
+  const handleCancel = () => {
     setEditing(false);
     setAvatarFile(null);
-  };
-  const onChange = (path, value) => {
-    // path: e.g. "nombre" o "preferencias.notificaciones"
-    if (path.startsWith("preferencias.")) {
-      const key = path.split(".")[1];
-      setForm((f) => ({ ...f, preferencias: { ...f.preferencias, [key]: value } }));
-    } else {
-      setForm((f) => ({ ...f, [path]: value }));
-    }
+    setErrors({});
+    setFeedback(null);
+    setForm(buildForm(user));
   };
 
-  const onSave = async (e) => {
-    e?.preventDefault();
-    // Validaciones mínimas
-    if (!form.nombre?.trim()) return alert("El nombre es obligatorio.");
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) return alert("Email inválido.");
+  function validateProfile(values) {
+    const nextErrors = {};
+
+    if (!values.nombre.trim()) {
+      nextErrors.nombre = "Ingresá tu nombre.";
+    }
+
+    if (values.telefono && !/^[0-9+\-\s()]{6,20}$/.test(values.telefono.trim())) {
+      nextErrors.telefono = "Ingresá un teléfono válido.";
+    }
+
+    if (values.direccion && values.direccion.trim().length < 4) {
+      nextErrors.direccion = "Ingresá una dirección más completa.";
+    }
+
+    return nextErrors;
+  }
+
+  const onSave = async (event) => {
+    event.preventDefault();
+
+    const validationErrors = validateProfile(form);
+    setErrors(validationErrors);
+
+    if (Object.keys(validationErrors).length > 0) {
+      setFeedback({
+        type: "error",
+        message: "Revisá los campos marcados antes de guardar.",
+      });
+      return;
+    }
 
     setSaving(true);
-    try {
-      // Si conectás backend: armás FormData y enviás
-      // const fd = new FormData();
-      // Object.entries(form).forEach(([k, v]) => {
-      //   if (k === "preferencias") fd.append(k, JSON.stringify(v));
-      //   else fd.append(k, v ?? "");
-      // });
-      // if (avatarFile) fd.append("avatar", avatarFile);
-      // await fetch("/api/me", { method: "POST", body: fd });
+    setFeedback(null);
 
-      // Mock de guardado
-      await new Promise((r) => setTimeout(r, 700));
-      setUser((u) => ({
-        ...u,
-        ...form,
-        avatarUrl: avatarFile ? avatarPreview : u.avatarUrl,
-      }));
+    try {
+      const payload = {
+        nombre: form.nombre.trim(),
+        telefono: form.telefono.trim(),
+        direccion: form.direccion.trim(),
+        barrio: form.barrio,
+      };
+
+      const updated = await UsersAPI.updateMe(payload, avatarFile);
+      login(updated);
+      setForm(buildForm(updated));
       setEditing(false);
       setAvatarFile(null);
-    } catch (e) {
-      console.error(e);
-      alert("No se pudo guardar. Intentá nuevamente.");
+      setFeedback({
+        type: "success",
+        message: "Tus datos se actualizaron correctamente.",
+      });
+    } catch (error) {
+      console.error("PROFILE_UPDATE_ERROR", error);
+      setFeedback({
+        type: "error",
+        message: getFriendlyApiError(
+          error,
+          "No pudimos guardar tus cambios. Probá nuevamente."
+        ),
+      });
     } finally {
       setSaving(false);
     }
   };
 
-  return (
-    <div className="mx-auto max-w-5xl px-6 md:px-8 py-10">
-      {/* Header */}
-      <header className="mb-6 flex items-center justify-between gap-3">
-        <div>
-          <h1 className="text-3xl md:text-4xl font-semibold text-[#2d3d33]">Perfil</h1>
-          <p className="text-gray-500 mt-2">Gestioná tus datos y preferencias.</p>
+  if (loading || !ready) {
+    return (
+      <div className="mx-auto max-w-5xl px-6 py-10 md:px-8">
+        <div className="animate-pulse rounded-[30px] border border-[#e4edd8] bg-white p-6 shadow-sm">
+          <div className="h-8 w-40 rounded-full bg-[#edf5e1]" />
+          <div className="mt-3 h-4 w-72 rounded-full bg-[#f2f6eb]" />
+          <div className="mt-8 grid gap-6 md:grid-cols-[280px_1fr]">
+            <div className="h-72 rounded-[28px] bg-[#f6faef]" />
+            <div className="h-72 rounded-[28px] bg-[#fbfdf8]" />
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          {!editing ? (
+      </div>
+    );
+  }
+
+  if (!form) {
+    return (
+      <div className="mx-auto max-w-4xl px-6 py-10 md:px-8">
+        <div className="rounded-[28px] border border-[#f0d7dc] bg-[#fff8f8] p-6 text-center">
+          <h1 className="text-2xl font-semibold text-[#203014]">Perfil de usuario</h1>
+          <p className="mt-3 text-sm leading-6 text-slate-600">
+            No pudimos preparar tu perfil para esta sesión.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-5xl px-6 py-10 md:px-8">
+      <SectionHero
+        eyebrow="Mi cuenta"
+        title="Perfil de usuario"
+        description="Gestioná tus datos personales y mantené actualizada tu información de contacto dentro de EcoRG."
+        className="mb-6"
+        actions={
+          !editing ? (
             <button
-              onClick={onEdit}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 hover:bg-gray-50"
+              type="button"
+              onClick={() => {
+                setEditing(true);
+                setFeedback(null);
+              }}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-[#d9e7ca] bg-white px-4 py-3 text-sm font-semibold text-[#35561a] transition hover:border-[#66a939] hover:bg-[#f7fbf1] lg:w-auto"
             >
-              <FiEdit2 className="w-4 h-4" /> Editar
+              <FiEdit2 className="h-4 w-4" />
+              Editar perfil
             </button>
           ) : (
-            <>
+            <div className="flex flex-wrap gap-2">
               <button
-                onClick={onCancel}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 hover:bg-gray-50"
+                type="button"
+                onClick={handleCancel}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-[#d9e7ca] bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
               >
-                <FiX className="w-4 h-4" /> Cancelar
+                <FiX className="h-4 w-4" />
+                Cancelar
               </button>
               <button
-                onClick={onSave}
+                type="submit"
+                form="profile-form"
                 disabled={saving}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0f8237] text-white hover:bg-[#0d6f2f] disabled:opacity-60"
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#66a939] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#5a9732] disabled:cursor-not-allowed disabled:opacity-70"
               >
-                <FiSave className="w-4 h-4" /> {saving ? "Guardando..." : "Guardar"}
+                {saving ? <FiLoader className="h-4 w-4 animate-spin" /> : <FiSave className="h-4 w-4" />}
+                {saving ? "Guardando..." : "Guardar cambios"}
               </button>
-            </>
-          )}
-        </div>
-      </header>
+            </div>
+          )
+        }
+      />
 
-      {/* Grid: avatar + formulario */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-        {/* Avatar */}
-        <aside className="md:col-span-4">
-          <div className="rounded-2xl border border-gray-100 bg-white shadow-sm p-6 flex flex-col items-center">
+      {feedback && (
+        <div
+          className={`mb-6 rounded-2xl border px-4 py-3 text-sm ${
+            feedback.type === "success"
+              ? "border-[#d5e6c1] bg-[#f5faee] text-[#35561a]"
+              : "border-[#f0d7dc] bg-[#fff8f8] text-[#8a3445]"
+          }`}
+        >
+          {feedback.message}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-[300px_1fr]">
+        <aside className="rounded-[28px] border border-[#e4edd8] bg-white p-6 shadow-sm">
+          <div className="flex flex-col items-center text-center">
             <div className="relative">
-              <div className="w-32 h-32 rounded-full bg-gray-100 border border-gray-200 overflow-hidden">
+              <div className="flex h-32 w-32 items-center justify-center overflow-hidden rounded-full border border-[#dce8ce] bg-[#f5faee]">
                 {avatarPreview ? (
-                  <img src={avatarPreview} alt="avatar" className="w-full h-full object-cover" />
+                  <img
+                    src={avatarPreview}
+                    alt="Avatar del usuario"
+                    className="h-full w-full object-cover"
+                  />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">
-                    Sin foto
-                  </div>
+                  <FiUser className="h-12 w-12 text-[#7ca757]" />
                 )}
               </div>
+
               {editing && (
-                <label className="absolute -bottom-2 right-0 inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white border border-gray-200 shadow cursor-pointer text-sm">
-                  <FiUpload className="w-4 h-4 text-[#0f8237]" />
+                <label className="absolute -bottom-2 right-0 inline-flex cursor-pointer items-center gap-2 rounded-xl border border-[#d9e7ca] bg-white px-3 py-2 text-sm font-medium text-[#35561a] shadow-sm transition hover:border-[#66a939]">
+                  <FiUpload className="h-4 w-4 text-[#66a939]" />
                   Cambiar
                   <input
                     type="file"
                     accept="image/*"
                     className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) setAvatarFile(f);
+                    onChange={(event) => {
+                      const file = event.target.files?.[0] || null;
+                      setAvatarFile(file);
                     }}
                   />
                 </label>
               )}
             </div>
 
-            <div className="mt-4 text-center">
-              <h3 className="text-lg font-semibold text-[#2d3d33]">{user.nombre}</h3>
-              <p className="text-gray-500 text-sm">{user.email}</p>
-            </div>
+            <h2 className="mt-5 text-xl font-semibold text-[#203014]">{form.nombre}</h2>
+            <p className="mt-1 text-sm text-slate-500">{form.email}</p>
+            <span className="mt-4 inline-flex rounded-full bg-[#eef6e4] px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-[#4f7a2f]">
+              {form.role === "admin" ? "Administrador" : "Cuenta ciudadana"}
+            </span>
+          </div>
 
-        
+          <div className="mt-6 rounded-2xl border border-[#dce8ce] bg-[#f7fbf1] p-4">
+            <h3 className="text-sm font-semibold text-[#29401a]">Logros ambientales</h3>
+            <p className="mt-2 text-2xl font-semibold text-[#203014]">
+              {Array.isArray(form?.badges) ? form.badges.length : Array.isArray(user?.badges) ? user.badges.length : 0}
+            </p>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Tus insignias se obtienen automaticamente cuando acciones reales son validadas en EcoRG.
+            </p>
+          </div>
+
+          <div className="mt-6 rounded-2xl border border-[#e7efdb] bg-[#fbfdf8] p-4">
+            <h3 className="text-sm font-semibold text-[#29401a]">Preferencias</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              La personalización de notificaciones y preferencias todavía no está disponible en esta versión de EcoRG.
+            </p>
           </div>
         </aside>
 
-        {/* Formulario */}
-        <section className="md:col-span-8">
-          <form
-            onSubmit={onSave}
-            className="rounded-2xl border border-gray-100 shadow-sm bg-white p-6 space-y-6"
-          >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Field label="Nombre y Apellido">
+        <section className="rounded-[28px] border border-[#e4edd8] bg-white p-6 shadow-sm">
+          <form id="profile-form" onSubmit={onSave} className="space-y-6">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <Field label="Nombre" error={errors.nombre}>
                 <input
-                  className="w-full rounded-xl border border-gray-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#0f8237]/30"
-                  value={editing ? form.nombre : user.nombre}
-                  onChange={(e) => onChange("nombre", e.target.value)}
                   disabled={!editing}
-                  required
+                  value={form.nombre}
+                  onChange={(event) => onChange("nombre", event.target.value)}
+                  className={inputClasses(errors.nombre, !editing)}
+                  placeholder="Tu nombre"
                 />
               </Field>
 
               <Field label="Email">
                 <input
-                  type="email"
-                  className="w-full rounded-xl border border-gray-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#0f8237]/30 disabled:bg-gray-50"
-                  value={editing ? form.email : user.email}
-                  onChange={(e) => onChange("email", e.target.value)}
-                  disabled={!editing} // si usás Firebase Auth, conviene no permitir cambiar email aquí
+                  disabled
+                  value={form.email}
+                  className={inputClasses("", true)}
                 />
+                <p className="mt-2 text-xs text-slate-500">
+                  El email se mantiene protegido y no puede editarse desde este perfil.
+                </p>
               </Field>
 
-              <Field label="Teléfono">
+              <Field label="Teléfono" error={errors.telefono}>
                 <input
-                  className="w-full rounded-xl border border-gray-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#0f8237]/30"
-                  value={editing ? form.telefono : user.telefono}
-                  onChange={(e) => onChange("telefono", e.target.value)}
                   disabled={!editing}
+                  value={form.telefono}
+                  onChange={(event) => onChange("telefono", event.target.value)}
+                  className={inputClasses(errors.telefono, !editing)}
+                  placeholder="Ejemplo: 2966 123456"
                 />
               </Field>
 
-              <Field label="Barrio ">
+              <Field label="Barrio">
                 <select
-                  className="w-full rounded-xl border border-gray-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#0f8237]/30"
-                  value={editing ? form.barrio : user.barrio}
-                  onChange={(e) => onChange("barrio", e.target.value)}
                   disabled={!editing}
+                  value={form.barrio}
+                  onChange={(event) => onChange("barrio", event.target.value)}
+                  className={inputClasses("", !editing)}
                 >
-                  {BARRIOS.map((b) => (
-                    <option key={b} value={b}>{b}</option>
+                  <option value="">Seleccionar barrio</option>
+                  {BARRIOS.map((barrio) => (
+                    <option key={barrio} value={barrio}>
+                      {barrio}
+                    </option>
                   ))}
                 </select>
               </Field>
 
-              <Field label="Dirección">
+              <Field label="Dirección" error={errors.direccion} className="md:col-span-2">
                 <input
-                  className="w-full rounded-xl border border-gray-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#0f8237]/30 md:col-span-2"
-                  value={editing ? form.direccion : user.direccion}
-                  onChange={(e) => onChange("direccion", e.target.value)}
                   disabled={!editing}
+                  value={form.direccion}
+                  onChange={(event) => onChange("direccion", event.target.value)}
+                  className={inputClasses(errors.direccion, !editing)}
+                  placeholder="Ingresá tu dirección"
                 />
               </Field>
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Field label="Preferencias">
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      className="rounded border-gray-300 text-[#0f8237] focus:ring-[#0f8237]"
-                      checked={editing ? form.preferencias.notificaciones : user.preferencias.notificaciones}
-                      onChange={(e) => onChange("preferencias.notificaciones", e.target.checked)}
-                      disabled={!editing}
-                    />
-                    <span className="text-gray-700">Recibir notificaciones</span>
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      className="rounded border-gray-300 text-[#0f8237] focus:ring-[#0f8237]"
-                      checked={editing ? form.preferencias.newsletter : user.preferencias.newsletter}
-                      onChange={(e) => onChange("preferencias.newsletter", e.target.checked)}
-                      disabled={!editing}
-                    />
-                    <span className="text-gray-700">Recibir newsletter</span>
-                  </label>
-                </div>
-              </Field>
-
-              {/* Zona de seguridad (placeholder) */}
-              <Field label="Seguridad (próximamente)">
-                <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-sm text-gray-600">
-                  Cambio de contraseña / 2FA desde el panel de seguridad.
-                </div>
-              </Field>
-            </div>
-
-            {editing && (
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={onCancel}
-                  className="px-4 py-2 rounded-xl border border-gray-200 hover:bg-gray-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="px-4 py-2 rounded-xl bg-[#0f8237] text-white hover:bg-[#0d6f2f] disabled:opacity-60"
-                >
-                  {saving ? "Guardando..." : "Guardar cambios"}
-                </button>
-              </div>
-            )}
           </form>
         </section>
       </div>
@@ -276,19 +390,22 @@ export default function Profile() {
   );
 }
 
-function Field({ label, children }) {
+function Field({ label, error, className = "", children }) {
   return (
-    <label className="block">
-      <span className="block text-sm text-gray-500 mb-1">{label}</span>
+    <label className={`block ${className}`}>
+      <span className="mb-2 block text-sm font-medium text-slate-700">{label}</span>
       {children}
+      {error && <p className="mt-2 text-sm text-[#a53c53]">{error}</p>}
     </label>
   );
 }
-function Stat({ label, value }) {
-  return (
-    <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
-      <div className="text-[#2d3d33] font-semibold">{value}</div>
-      <div className="text-xs text-gray-500">{label}</div>
-    </div>
-  );
+
+function inputClasses(error, disabled) {
+  return `w-full rounded-2xl border px-4 py-3 text-sm outline-none transition ${
+    disabled ? "bg-slate-50 text-slate-500" : "bg-[#fbfdf8] text-slate-700"
+  } ${
+    error
+      ? "border-[#d98a9b] focus:border-[#c04b62] focus:ring-2 focus:ring-[#c04b62]/20"
+      : "border-[#d9e7ca] focus:border-[#66a939] focus:ring-2 focus:ring-[#66a939]/20"
+  }`;
 }

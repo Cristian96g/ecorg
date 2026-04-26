@@ -1,15 +1,23 @@
-// src/components/Card.jsx
 import React from "react";
+import { Link } from "react-router-dom";
 
-export default function Card({ icon: Icon, title, description, link }) {
+export default function FeatureCard({ icon: Icon, title, description, link }) {
   return (
-    <a
-      href={link}
-      className="block rounded-xl border border-gray-200 p-8 shadow-xl transition hover:border-[#2d3d33]/10 hover:shadow-[#2d3d33]/10"
+    <Link
+      to={link}
+      className="block rounded-[28px] border border-[#dce8ce] bg-white p-7 shadow-[0_16px_40px_rgba(59,89,34,0.08)] transition hover:-translate-y-0.5 hover:border-[#c7dcb0] hover:shadow-[0_18px_44px_rgba(59,89,34,0.12)]"
     >
-      {Icon && <Icon className="w-10 h-10 text-[#66a939]" />}
-      <h2 className="mt-4 text-xl font-bold text-[#3c6724]">{title}</h2>
-      <p className="mt-1 text-sm text-gray-700">{description}</p>
-    </a>
+      {Icon && (
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#f1f7e7]">
+          <Icon className="h-7 w-7 text-[#66a939]" />
+        </div>
+      )}
+
+      <h2 className="mt-5 text-xl font-semibold text-[#29401a]">{title}</h2>
+      <p className="mt-3 text-sm leading-6 text-slate-600">{description}</p>
+      <span className="mt-5 inline-flex text-sm font-semibold text-[#5a9732]">
+        Explorar sección
+      </span>
+    </Link>
   );
 }

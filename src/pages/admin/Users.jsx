@@ -1,7 +1,25 @@
-import { useEffect, useMemo, useState } from "react";
-import { FiPlus, FiEdit2, FiTrash2 } from "react-icons/fi";
-import { UsersAPI } from "../../api/api";
-import { Card, CardHeader, CardBody, Button, Th, Td, Input, Select } from "../../components/ui/Admin-ui";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { FiEdit2, FiLoader, FiPlus, FiTrash2, FiUsers } from "react-icons/fi";
+import { toast } from "react-toastify";
+import Modal from "../../components/ui/Modal";
+import RowActionsMenu from "../../components/admin/RowActionsMenu";
+import Pagination from "../../components/ui/Pagination";
+import { useAuth } from "../../state/auth";
+import { UsersAPI, getFriendlyApiError } from "../../api/api";
+import {
+  AdminSectionHero,
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  EmptyState,
+  FilterBar,
+  Input,
+  ResultCount,
+  Select,
+  Td,
+  Th,
+} from "../../components/ui/Admin-ui";
 
 const ROLES = [
   { value: "", label: "Todos" },
@@ -9,166 +27,297 @@ const ROLES = [
   { value: "admin", label: "Admin" },
 ];
 
+function formatDate(value) {
+  if (!value) return "—";
+  return new Date(value).toLocaleDateString("es-AR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
+function validateUserForm(form, isEdit) {
+  const errors = {};
+  const email = form.email.trim().toLowerCase();
+
+  if (!form.nombre.trim()) {
+    errors.nombre = "El nombre es obligatorio.";
+  }
+
+  if (!email) {
+    errors.email = "El email es obligatorio.";
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    errors.email = "Ingresá un email válido.";
+  }
+
+  if (!["user", "admin"].includes(form.role)) {
+    errors.role = "Seleccioná un rol válido.";
+  }
+
+  if (form.telefono && !/^[0-9+\-\s()]{6,20}$/.test(form.telefono.trim())) {
+    errors.telefono = "Ingresá un teléfono válido.";
+  }
+
+  if (!isEdit) {
+    if (!form.password.trim()) {
+      errors.password = "La contraseña es obligatoria para crear un usuario.";
+    } else if (form.password.trim().length < 6) {
+      errors.password = "La contraseña debe tener al menos 6 caracteres.";
+    }
+  }
+
+  return errors;
+}
+
 export default function AdminUsers() {
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  // filtros
   const [q, setQ] = useState("");
   const [role, setRole] = useState("");
-
-  // modal form
   const [openForm, setOpenForm] = useState(false);
-  const [editing, setEditing] = useState(null); // user | null
+  const [editing, setEditing] = useState(null);
+  const [toDelete, setToDelete] = useState(null);
+  const [removingId, setRemovingId] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        setLoading(true);
-        const list = await UsersAPI.list();
-        setUsers(Array.isArray(list) ? list : (list.items ?? []));
-      } catch (e) {
-        console.error(e);
-        alert("No se pudieron cargar los usuarios.");
-      } finally {
-        setLoading(false);
-      }
-    })();
+  const fetchUsers = useCallback(async () => {
+    try {
+      setLoading(true);
+      const list = await UsersAPI.list();
+      setUsers(Array.isArray(list) ? list : list?.items ?? []);
+    } catch (error) {
+      console.error("ADMIN_USERS_LIST_ERROR", error);
+      toast.error(getFriendlyApiError(error, "No se pudieron cargar los usuarios."));
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
+
+  const adminCount = useMemo(
+    () => users.filter((item) => item.role === "admin").length,
+    [users]
+  );
+
   const rows = useMemo(() => {
-    const text = (u) =>
-      `${u._id} ${u.nombre ?? ""} ${u.email ?? ""} ${u.role ?? ""}`.toLowerCase();
-    return (users || []).filter((u) => {
-      const okRole = !role || u.role === role;
-      const okQ = !q || text(u).includes(q.toLowerCase());
+    return users.filter((user) => {
+      const text =
+        `${user._id} ${user.nombre ?? ""} ${user.email ?? ""} ${user.role ?? ""} ${user.telefono ?? ""} ${user.barrio ?? ""}`.toLowerCase();
+      const okRole = !role || user.role === role;
+      const okQ = !q || text.includes(q.toLowerCase());
       return okRole && okQ;
     });
   }, [users, q, role]);
 
-  /* ---------- acciones (optimistas) ---------- */
+  const paginatedRows = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return rows.slice(start, start + pageSize);
+  }, [rows, page, pageSize]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [q, role, pageSize]);
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [rows.length, page, pageSize]);
+
   async function handleCreate(payload) {
     try {
-      const created = await UsersAPI.create(payload);
-      setUsers((cur) => [created, ...cur]);
-      alert("Usuario creado con éxito.");
-    } catch (e) {
-      console.error(e);
-      alert("No se pudo crear el usuario.");
+      await UsersAPI.create(payload);
+      await fetchUsers();
+      toast.success("Usuario creado con éxito.");
+      return true;
+    } catch (error) {
+      console.error("ADMIN_USERS_CREATE_ERROR", error);
+      toast.error(getFriendlyApiError(error, "No se pudo crear el usuario."));
+      return false;
     }
   }
 
   async function handleUpdate(id, payload) {
-    const prev = users;
-    setUsers((cur) => cur.map((u) => (u._id === id ? { ...u, ...payload } : u)));
     try {
-      const saved = await UsersAPI.update(id, payload);
-      setUsers((cur) => cur.map((u) => (u._id === id ? saved : u)));
-    } catch (e) {
-      console.error(e);
-      setUsers(prev); // rollback
-      alert("No se pudo actualizar el usuario.");
+      await UsersAPI.update(id, payload);
+      await fetchUsers();
+      toast.success("Usuario actualizado.");
+      return true;
+    } catch (error) {
+      console.error("ADMIN_USERS_UPDATE_ERROR", error);
+      toast.error(getFriendlyApiError(error, "No se pudo actualizar el usuario."));
+      return false;
     }
   }
 
   async function handleRemove(id) {
-    const prev = users;
-    setUsers((cur) => cur.filter((u) => u._id !== id));
     try {
+      setRemovingId(id);
       await UsersAPI.remove(id);
-    } catch (e) {
-      console.error(e);
-      setUsers(prev);
-      alert("No se pudo eliminar el usuario.");
+      await fetchUsers();
+      toast.success("Usuario eliminado.");
+    } catch (error) {
+      console.error("ADMIN_USERS_DELETE_ERROR", error);
+      toast.error(getFriendlyApiError(error, "No se pudo eliminar el usuario."));
+    } finally {
+      setRemovingId("");
     }
   }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-800">Usuarios</h1>
-          <p className="text-slate-500 mt-1">Gestioná cuentas, roles y accesos de la plataforma.</p>
-        </div>
-        <Button
-          variant="primary"
-          onClick={() => {
-            setEditing(null);
-            setOpenForm(true);
-          }}
-        >
-          <FiPlus className="w-5 h-5" /> Nuevo usuario
-        </Button>
-      </div>
+      <AdminSectionHero
+        title="Usuarios"
+        description="Gestioná cuentas, roles y datos básicos de la plataforma."
+        action={
+          <Button
+            variant="primary"
+            onClick={() => {
+              setEditing(null);
+              setOpenForm(true);
+            }}
+          >
+            <FiPlus className="h-5 w-5" /> Nuevo usuario
+          </Button>
+        }
+      />
 
       <Card>
         <CardHeader
           title="Listado de usuarios"
-          action={
-            <Button variant="ghost" onClick={() => { setQ(""); setRole(""); }}>
-              Limpiar filtros
-            </Button>
-          }
+          subtitle="Buscá por nombre, email o rol para revisar accesos y permisos."
         />
         <CardBody>
-          {/* Filtros */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
-            <Input placeholder="Buscar por nombre o email…" value={q} onChange={(e)=>setQ(e.target.value)} />
-            <Select value={role} onChange={(e)=>setRole(e.target.value)}>
-              {ROLES.map(r => <option key={r.value || "all"} value={r.value}>{r.label}</option>)}
-            </Select>
-            <div className="hidden md:block" />
-          </div>
+          <FilterBar className="mb-5">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <Input
+                placeholder="Buscar por nombre o email..."
+                value={q}
+                onChange={(event) => setQ(event.target.value)}
+              />
+              <Select value={role} onChange={(event) => setRole(event.target.value)}>
+                {ROLES.map((item) => (
+                  <option key={item.value || "all"} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </Select>
+              <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+                <ResultCount count={rows.length} label="usuarios" />
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setQ("");
+                    setRole("");
+                  }}
+                >
+                  Limpiar filtros
+                </Button>
+              </div>
+            </div>
+          </FilterBar>
 
-          {/* Tabla */}
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto rounded-[24px] border border-[#edf3e6]">
             <table className="min-w-full text-sm">
-              <thead className="bg-[#0f8237]/10 text-[#2d3d33]">
-                <tr className="text-left">
-                  <Th>Nombre</Th>
-                  <Th>Email</Th>
+              <thead className="bg-[#f8fbf4] text-slate-700">
+                <tr>
+                  <Th>Usuario</Th>
                   <Th>Rol</Th>
+                  <Th>Contacto</Th>
+                  <Th>Alta</Th>
                   <Th className="w-[220px]">Acciones</Th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {loading && (
                   <tr>
-                    <Td colSpan={4} className="py-8 text-center text-gray-500">Cargando…</Td>
-                  </tr>
-                )}
-                {!loading && rows.map((u) => (
-                  <tr key={u._id} className="hover:bg-gray-50/60">
-                    <Td className="font-medium text-[#2d3d33]">{u.nombre || "-"}</Td>
-                    <Td className="text-gray-700">{u.email}</Td>
-                    <Td className="capitalize">{u.role || "-"}</Td>
-                    <Td>
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          variant="ghost"
-                          className="px-2 py-1"
-                          onClick={() => { setEditing(u); setOpenForm(true); }}
-                        >
-                          <FiEdit2 className="w-4 h-4" /> Editar
-                        </Button>
-                        <Button
-                          variant="danger"
-                          className="px-2 py-1"
-                          onClick={() => {
-                            if (confirm("¿Eliminar este usuario?")) handleRemove(u._id);
-                          }}
-                        >
-                          <FiTrash2 className="w-4 h-4" /> Eliminar
-                        </Button>
-                      </div>
+                    <Td colSpan={5} className="py-8 text-center text-gray-500">
+                      Cargando usuarios...
                     </Td>
                   </tr>
-                ))}
+                )}
+
+                {!loading &&
+                  paginatedRows.map((user) => {
+                    const isSelf = currentUser?._id === user._id;
+                    const isLastAdmin = user.role === "admin" && adminCount <= 1;
+
+                    return (
+                      <tr key={user._id} className="hover:bg-gray-50/60">
+                        <Td>
+                          <div className="min-w-[180px]">
+                            <p className="font-medium text-[#2d3d33]">
+                              {user.nombre || "-"}
+                            </p>
+                            <p className="mt-1 text-sm text-slate-500">{user.email}</p>
+                          </div>
+                        </Td>
+                        <Td>
+                          <span
+                            className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
+                              user.role === "admin"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : "bg-slate-100 text-slate-700"
+                            }`}
+                          >
+                            {user.role === "admin" ? "Admin" : "Usuario"}
+                          </span>
+                        </Td>
+                        <Td>
+                          <div className="text-sm text-slate-600">
+                            <p>{user.telefono || "Sin teléfono"}</p>
+                            <p className="mt-1">{user.barrio || "Sin barrio"}</p>
+                          </div>
+                        </Td>
+                        <Td className="text-slate-600">{formatDate(user.createdAt)}</Td>
+                        <Td>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              variant="ghost"
+                              className="px-3 py-2"
+                              onClick={() => {
+                                setEditing(user);
+                                setOpenForm(true);
+                              }}
+                            >
+                              <FiEdit2 className="h-4 w-4" /> Editar
+                            </Button>
+                            <RowActionsMenu
+                              items={[
+                                {
+                                  label: "Eliminar",
+                                  icon: FiTrash2,
+                                  tone: "danger",
+                                  disabled: isSelf || isLastAdmin || removingId === user._id,
+                                  title: isSelf
+                                    ? "No podés eliminar tu propia cuenta desde este panel."
+                                    : isLastAdmin
+                                      ? "No podés eliminar el último administrador."
+                                      : undefined,
+                                  onClick: () => setToDelete(user),
+                                },
+                              ]}
+                            />
+                          </div>
+                        </Td>
+                      </tr>
+                    );
+                  })}
+
                 {!loading && rows.length === 0 && (
                   <tr>
-                    <Td colSpan={4} className="py-10 text-center text-gray-500">
-                      No hay usuarios con los filtros actuales.
+                    <Td colSpan={5} className="px-4 py-4">
+                      <EmptyState
+                        icon={FiUsers}
+                        title="No hay usuarios para mostrar"
+                        description="Ajustá la búsqueda o el filtro por rol para encontrar cuentas registradas."
+                      />
                     </Td>
                   </tr>
                 )}
@@ -178,54 +327,102 @@ export default function AdminUsers() {
         </CardBody>
       </Card>
 
-      {/* Panel lateral: crear/editar */}
+      {!loading && rows.length > 0 ? (
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          totalItems={rows.length}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
+      ) : null}
+
       {openForm && (
         <UserPanel
           user={editing}
+          currentUserId={currentUser?._id}
+          adminCount={adminCount}
           onClose={() => setOpenForm(false)}
-          onCreate={async (payload) => { await handleCreate(payload); setOpenForm(false); }}
-          onUpdate={async (id, payload) => { await handleUpdate(id, payload); setOpenForm(false); }}
+          onCreate={async (payload) => {
+            const ok = await handleCreate(payload);
+            if (ok) setOpenForm(false);
+          }}
+          onUpdate={async (id, payload) => {
+            const ok = await handleUpdate(id, payload);
+            if (ok) setOpenForm(false);
+          }}
+        />
+      )}
+
+      {toDelete && (
+        <ConfirmDeleteUser
+          user={toDelete}
+          loading={removingId === toDelete._id}
+          onCancel={() => setToDelete(null)}
+          onConfirm={async () => {
+            await handleRemove(toDelete._id);
+            setToDelete(null);
+          }}
         />
       )}
     </div>
   );
 }
 
-/* ------------ Side Panel (Create / Edit) ------------- */
-function UserPanel({ user, onClose, onCreate, onUpdate }) {
-  const isEdit = !!user;
+function UserPanel({ user, currentUserId, adminCount, onClose, onCreate, onUpdate }) {
+  const isEdit = Boolean(user);
+  const isSelf = currentUserId === user?._id;
   const [form, setForm] = useState({
     nombre: user?.nombre ?? "",
     email: user?.email ?? "",
     role: user?.role ?? "user",
-    password: "", // solo para crear o reset
+    telefono: user?.telefono ?? "",
+    barrio: user?.barrio ?? "",
+    password: "",
   });
   const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState({});
 
-  function setField(k, v) { setForm((f) => ({ ...f, [k]: v })); }
+  function setField(key, value) {
+    setForm((current) => ({ ...current, [key]: value }));
+    setErrors((current) => ({ ...current, [key]: "" }));
+  }
 
   async function submit() {
-    if (!form.nombre || !form.email) {
-      alert("Completá nombre y email.");
+    const validationErrors = validateUserForm(form, isEdit);
+    setErrors(validationErrors);
+
+    if (Object.keys(validationErrors).length > 0) {
+      toast.error("Revisá los campos marcados antes de guardar.");
       return;
     }
+
+    if (
+      isEdit &&
+      isSelf &&
+      user?.role === "admin" &&
+      form.role === "user" &&
+      adminCount <= 1
+    ) {
+      toast.error("No podés quitar el último administrador del sistema.");
+      return;
+    }
+
     setSaving(true);
     try {
+      const payload = {
+        nombre: form.nombre.trim(),
+        email: form.email.trim().toLowerCase(),
+        role: form.role,
+        telefono: form.telefono.trim(),
+        barrio: form.barrio.trim(),
+      };
+
       if (isEdit) {
-        const payload = { nombre: form.nombre, email: form.email, role: form.role };
-        // si quiere resetear contraseña:
-        if (form.password?.trim()) payload.password = form.password.trim();
         await onUpdate(user._id, payload);
       } else {
-        if (!form.password?.trim()) {
-          alert("Para crear un usuario, ingresá una contraseña.");
-          setSaving(false);
-          return;
-        }
         await onCreate({
-          nombre: form.nombre,
-          email: form.email,
-          role: form.role,
+          ...payload,
           password: form.password.trim(),
         });
       }
@@ -235,53 +432,120 @@ function UserPanel({ user, onClose, onCreate, onUpdate }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50">
-      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-xl p-6 overflow-y-auto">
-        <h3 className="text-xl font-semibold text-[#2d3d33]">
-          {isEdit ? "Editar usuario" : "Nuevo usuario"}
-        </h3>
-        <p className="text-gray-500 mb-4">
-          {isEdit ? "Actualizá los datos del usuario." : "Cargá un nuevo usuario con su rol."}
-        </p>
+    <Modal open onClose={onClose} title={isEdit ? "Editar usuario" : "Nuevo usuario"} size="md">
+      <p className="mb-4 text-gray-500">
+        {isEdit
+          ? "Actualizá los datos básicos y el rol del usuario."
+          : "Cargá un nuevo usuario para darle acceso al sistema."}
+      </p>
 
-        <label className="block mb-3">
-          <span className="block text-sm text-gray-500 mb-1">Nombre</span>
-          <Input value={form.nombre} onChange={(e)=>setField("nombre", e.target.value)} placeholder="Nombre y apellido" />
-        </label>
+      <label className="mb-3 block">
+        <span className="mb-1 block text-sm text-gray-500">Nombre</span>
+        <Input
+          value={form.nombre}
+          onChange={(e) => setField("nombre", e.target.value)}
+          placeholder="Nombre y apellido"
+        />
+        {errors.nombre && <p className="mt-1 text-sm text-[#a53c53]">{errors.nombre}</p>}
+      </label>
 
-        <label className="block mb-3">
-          <span className="block text-sm text-gray-500 mb-1">Email</span>
-          <Input type="email" value={form.email} onChange={(e)=>setField("email", e.target.value)} placeholder="correo@ejemplo.com" />
-        </label>
+      <label className="mb-3 block">
+        <span className="mb-1 block text-sm text-gray-500">Email</span>
+        <Input
+          type="email"
+          value={form.email}
+          onChange={(e) => setField("email", e.target.value)}
+          placeholder="correo@ejemplo.com"
+        />
+        {errors.email && <p className="mt-1 text-sm text-[#a53c53]">{errors.email}</p>}
+      </label>
 
-        <label className="block mb-3">
-          <span className="block text-sm text-gray-500 mb-1">Rol</span>
-          <Select value={form.role} onChange={(e)=>setField("role", e.target.value)}>
-            <option value="user">Usuario</option>
-            <option value="admin">Admin</option>
-          </Select>
-        </label>
+      <label className="mb-3 block">
+        <span className="mb-1 block text-sm text-gray-500">Rol</span>
+        <Select
+          value={form.role}
+          onChange={(e) => setField("role", e.target.value)}
+          disabled={isEdit && isSelf && user?.role === "admin" && adminCount <= 1}
+        >
+          <option value="user">Usuario</option>
+          <option value="admin">Admin</option>
+        </Select>
+        {errors.role && <p className="mt-1 text-sm text-[#a53c53]">{errors.role}</p>}
+      </label>
 
-        <label className="block mb-6">
-          <span className="block text-sm text-gray-500 mb-1">
-            {isEdit ? "Nueva contraseña (opcional)" : "Contraseña"}
-          </span>
+      <label className="mb-3 block">
+        <span className="mb-1 block text-sm text-gray-500">Teléfono</span>
+        <Input
+          value={form.telefono}
+          onChange={(e) => setField("telefono", e.target.value)}
+          placeholder="Ej: 2966 123456"
+        />
+        {errors.telefono && <p className="mt-1 text-sm text-[#a53c53]">{errors.telefono}</p>}
+      </label>
+
+      <label className="mb-3 block">
+        <span className="mb-1 block text-sm text-gray-500">Barrio</span>
+        <Input
+          value={form.barrio}
+          onChange={(e) => setField("barrio", e.target.value)}
+          placeholder="Ej: Centro"
+        />
+      </label>
+
+      {!isEdit ? (
+        <label className="mb-6 block">
+          <span className="mb-1 block text-sm text-gray-500">Contraseña</span>
           <Input
             type="password"
             value={form.password}
-            onChange={(e)=>setField("password", e.target.value)}
-            placeholder={isEdit ? "Dejar vacío para no cambiar" : "Mínimo 6 caracteres"}
+            onChange={(e) => setField("password", e.target.value)}
+            placeholder="Mínimo 6 caracteres"
           />
+          {errors.password && <p className="mt-1 text-sm text-[#a53c53]">{errors.password}</p>}
         </label>
-
-        <div className="flex items-center justify-end gap-2">
-          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-          <Button variant="primary" onClick={submit} disabled={saving}>
-            {saving ? "Guardando…" : (isEdit ? "Guardar cambios" : "Crear usuario")}
-          </Button>
+      ) : (
+        <div className="mb-6 rounded-2xl border border-[#e7efdb] bg-[#fbfdf8] px-4 py-3 text-sm text-slate-600">
+          La contraseña no se muestra ni se edita desde este formulario.
         </div>
+      )}
+
+      <div className="flex items-center justify-end gap-2">
+        <Button variant="ghost" onClick={onClose} disabled={saving}>
+          Cancelar
+        </Button>
+        <Button variant="primary" onClick={submit} disabled={saving}>
+          {saving ? (
+            <>
+              <FiLoader className="h-4 w-4 animate-spin" /> Guardando...
+            </>
+          ) : isEdit ? (
+            "Guardar cambios"
+          ) : (
+            "Crear usuario"
+          )}
+        </Button>
       </div>
-    </div>
+    </Modal>
+  );
+}
+
+function ConfirmDeleteUser({ user, loading, onCancel, onConfirm }) {
+  return (
+    <Modal open={!!user} onClose={onCancel} title="Eliminar usuario" size="sm">
+      <p className="text-sm leading-6 text-slate-600">
+        ¿Seguro que querés eliminar al usuario{" "}
+        <span className="font-medium">{user?.nombre || user?.email}</span>?
+        Esta acción no se puede deshacer.
+      </p>
+
+      <div className="mt-5 flex justify-end gap-2">
+        <Button variant="ghost" onClick={onCancel} disabled={loading}>
+          Cancelar
+        </Button>
+        <Button variant="danger" onClick={onConfirm} disabled={loading}>
+          {loading ? "Eliminando..." : "Eliminar"}
+        </Button>
+      </div>
+    </Modal>
   );
 }

@@ -1,6 +1,11 @@
-// src/state/auth.jsx
-import { createContext, useContext, useEffect, useState } from "react";
-import { AuthAPI, getToken, clearToken } from "../api/api";
+/* eslint-disable react-refresh/only-export-components */
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import {
+  AuthAPI,
+  clearToken,
+  getToken,
+  registerUnauthorizedHandler,
+} from "../api/api";
 
 const AuthCtx = createContext(null);
 
@@ -8,12 +13,33 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [ready, setReady] = useState(false);
 
-  // Al cargar la app, si hay token => intento /users/me
+  const login = useCallback((userObj) => {
+    setUser(userObj);
+  }, []);
+
+  const logout = useCallback(() => {
+    clearToken();
+    setUser(null);
+    setReady(true);
+  }, []);
+
+  useEffect(() => {
+    registerUnauthorizedHandler(() => {
+      clearToken();
+      setUser(null);
+      setReady(true);
+    });
+
+    return () => {
+      registerUnauthorizedHandler(null);
+    };
+  }, []);
+
   useEffect(() => {
     (async () => {
       try {
         if (getToken()) {
-          const me = await AuthAPI.me(); // /users/me (usa el token por interceptor)
+          const me = await AuthAPI.me();
           setUser(me);
         }
       } catch {
@@ -24,9 +50,6 @@ export function AuthProvider({ children }) {
       }
     })();
   }, []);
-
-  const login = (userObj) => setUser(userObj);
-  const logout = () => { clearToken(); setUser(null); };
 
   return (
     <AuthCtx.Provider value={{ user, ready, login, logout }}>

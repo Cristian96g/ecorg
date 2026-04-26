@@ -1,24 +1,28 @@
-import React, { useState } from "react";
+import React from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useNavigate, Link, useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { AuthAPI, getFriendlyApiError, setToken } from "../../api/api";
 import { useAuth } from "../../state/auth";
 import { toast } from "react-toastify";
 
 const schema = z.object({
+  nombre: z.string().min(1, "El nombre es obligatorio"),
   email: z.string().min(1, "El email es obligatorio").email("Formato de email invÃ¡lido"),
-  password: z.string().min(1, "La contraseÃ±a es obligatoria"),
+  password: z.string().min(6, "La contraseÃ±a debe tener al menos 6 caracteres"),
+  telefono: z.string().optional(),
+  direccion: z.string().optional(),
+  barrio: z.string().optional(),
 });
 
-export default function LoginForm() {
+export default function RegisterForm() {
   const navigate = useNavigate();
   const location = useLocation();
   const params = new URLSearchParams(location.search);
   const next = params.get("next") || "/";
   const { login } = useAuth();
-  const [serverError, setServerError] = useState("");
+  const [serverError, setServerError] = React.useState("");
 
   const {
     register,
@@ -27,61 +31,31 @@ export default function LoginForm() {
   } = useForm({ resolver: zodResolver(schema), mode: "onSubmit" });
 
   const onSubmit = async (data) => {
-    setServerError("");
-    let loadingToastId = null;
-    let loadingResolved = false;
-
     try {
-      loadingToastId = toast.loading("Ingresando...");
-      const { token, user } = await AuthAPI.login(data.email, data.password);
-
-      toast.update(loadingToastId, {
-        render: "Inicio de sesiÃ³n exitoso",
-        type: "success",
-        isLoading: false,
-        autoClose: 3000,
-      });
-      loadingResolved = true;
-
+      setServerError("");
+      const { token, user } = await AuthAPI.register(data);
       setToken(token);
       login(user);
+      toast.success("Cuenta creada con Ã©xito");
       navigate(next, { replace: true });
     } catch (err) {
-      const apiError = err?.response?.data?.error;
-      let friendly = getFriendlyApiError(err, "No pudimos iniciar sesiÃ³n. VerificÃ¡ tus datos.");
-
-      if (apiError === "USER_NOT_FOUND") {
-        friendly = "El usuario no estÃ¡ registrado. NecesitÃ¡s crear tu cuenta.";
-      } else if (apiError === "WRONG_PASSWORD") {
-        friendly = "La contraseÃ±a es incorrecta. ProbÃ¡ nuevamente.";
-      } else if (apiError === "MISSING_FIELDS") {
-        friendly = "CompletÃ¡ email y contraseÃ±a.";
-      }
-
+      const msg = getFriendlyApiError(err, "No pudimos crear tu cuenta. ProbÃ¡ nuevamente.");
       if (import.meta.env.DEV) {
-        console.error("LOGIN_FORM_ERROR", err);
+        console.error("REGISTER_FORM_ERROR", err);
       }
-
-      setServerError(friendly);
-      toast.error(friendly);
-      if (loadingToastId && !loadingResolved) {
-        toast.dismiss(loadingToastId);
-      }
-    } finally {
-      if (loadingToastId && !loadingResolved) {
-        toast.dismiss(loadingToastId);
-      }
+      setServerError(msg);
+      toast.error(msg);
     }
   };
 
-  const [show, setShow] = useState(false);
+  const [show, setShow] = React.useState(false);
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      <div className="text-left">
-        <h2 className="text-2xl font-semibold text-[#203014]">Bienvenido/a</h2>
+      <div>
+        <h2 className="text-2xl font-semibold text-[#203014]">Crear cuenta</h2>
         <p className="mt-2 text-sm leading-6 text-slate-600">
-          IngresÃ¡ tus credenciales para continuar usando EcoRG.
+          Sumate a EcoRG en un minuto y empezÃ¡ a participar desde tu barrio.
         </p>
       </div>
 
@@ -90,6 +64,12 @@ export default function LoginForm() {
           {serverError}
         </div>
       )}
+
+      <label className="block">
+        <span className="mb-1 block text-sm font-medium text-[#2d3d33]">Nombre y apellido</span>
+        <input className="input-base" placeholder="MarÃ­a LÃ³pez" {...register("nombre")} />
+        {errors.nombre && <p role="alert" className="mt-1 text-sm text-red-600">{errors.nombre.message}</p>}
+      </label>
 
       <label className="block">
         <span className="mb-1 block text-sm font-medium text-[#2d3d33]">Email</span>
@@ -103,7 +83,7 @@ export default function LoginForm() {
           <input
             type={show ? "text" : "password"}
             className="input-base"
-            placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
+            placeholder="MÃ­nimo 6 caracteres"
             {...register("password")}
           />
           <button
@@ -118,19 +98,29 @@ export default function LoginForm() {
         {errors.password && <p role="alert" className="mt-1 text-sm text-red-600">{errors.password.message}</p>}
       </label>
 
-      <div className="flex items-center justify-between text-sm">
-        <label className="inline-flex select-none items-center gap-2 text-[#2d3d33]/80">
-          <input type="checkbox" className="accent-[#66a939]" />
-          Recordarme
+      <label className="block">
+        <span className="mb-1 block text-sm font-medium text-[#2d3d33]">TelÃ©fono (opcional)</span>
+        <input className="input-base" placeholder="2966 123456" {...register("telefono")} />
+      </label>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-[#2d3d33]">DirecciÃ³n</span>
+          <input className="input-base" placeholder="Calle 123" {...register("direccion")} />
         </label>
-        <Link to="/login" className="text-[#4f7a2f] hover:underline">
-          Â¿NecesitÃ¡s ayuda para ingresar?
-        </Link>
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-[#2d3d33]">Barrio</span>
+          <input className="input-base" placeholder="San Benito" {...register("barrio")} />
+        </label>
       </div>
 
       <button type="submit" disabled={isSubmitting} className="buttonprimary w-full rounded-2xl px-6 py-3 font-medium shadow">
-        {isSubmitting ? "Ingresando..." : "Iniciar sesiÃ³n"}
+        {isSubmitting ? "Creando cuenta..." : "Registrarme"}
       </button>
+
+      <p className="text-center text-xs text-[#2d3d33]/60">
+        Al registrarte aceptÃ¡s los tÃ©rminos y condiciones de uso de EcoRG.
+      </p>
     </form>
   );
 }
